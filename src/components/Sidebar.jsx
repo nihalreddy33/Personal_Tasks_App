@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { projectColor } from "../lib/tasks";
 
 const NAV = [
@@ -6,7 +7,18 @@ const NAV = [
   { id: "performance", label: "Performance", icon: ChartIcon },
 ];
 
-export default function Sidebar({ view, onNavigate, projects, onAddTask }) {
+export default function Sidebar({ view, onNavigate, projects, onAddProject }) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+
+  function submitProject(e) {
+    e.preventDefault();
+    const n = name.trim();
+    if (n) onAddProject(n);
+    setName("");
+    setAdding(false);
+  }
+
   return (
     <aside className="sidebar">
       <div className="sb-brand">
@@ -31,11 +43,37 @@ export default function Sidebar({ view, onNavigate, projects, onAddTask }) {
       <div className="sb-projects">
         <div className="sb-section row-between">
           <span>Projects</span>
-          <button className="sb-add" onClick={onAddTask} title="New task">
+          <button
+            className="sb-add"
+            onClick={() => setAdding((a) => !a)}
+            title="Add project"
+          >
             +
           </button>
         </div>
         <ul>
+          {adding && (
+            <li className="sb-add-row">
+              <form onSubmit={submitProject}>
+                <input
+                  className="sb-add-input"
+                  autoFocus
+                  placeholder="Project name…"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onBlur={() => {
+                    if (!name.trim()) setAdding(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setName("");
+                      setAdding(false);
+                    }
+                  }}
+                />
+              </form>
+            </li>
+          )}
           {projects.map((p) => (
             <li key={p}>
               <span

@@ -71,3 +71,7 @@ export const createTask = (data) =>
 export const updateTask = (id, patch) =>
   req(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 export const deleteTask = (id) => req(`/tasks/${id}`, { method: "DELETE" });
+
+export const listProjects = () => req("/projects");
+export const createProject = (name) =>
+  req("/projects", { method: "POST", body: JSON.stringify({ name }) });

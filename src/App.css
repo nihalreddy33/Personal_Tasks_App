@@ -121,6 +121,21 @@
 .sb-projects li:hover {
   background: var(--surface-2);
 }
+.sb-add-row:hover {
+  background: transparent;
+}
+.sb-add-input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13.5px;
+}
+.sb-add-input:focus {
+  outline: none;
+}
 .dot {
   width: 9px;
   height: 9px;

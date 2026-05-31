@@ -21,6 +21,7 @@ const TITLES = {
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
+  const [dbProjects, setDbProjects] = useState([]);
   const [authed, setAuthed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,13 +48,22 @@ export default function App() {
     }
   }, [theme]);
 
-  const projects = useMemo(() => deriveProjects(tasks), [tasks]);
+  // Projects shown = defaults ∪ projects referenced by tasks ∪ stored projects.
+  const projects = useMemo(() => {
+    const set = new Set(deriveProjects(tasks));
+    for (const p of dbProjects) set.add(p);
+    return [...set];
+  }, [tasks, dbProjects]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.listTasks();
-      setTasks(data);
+      const [taskData, projData] = await Promise.all([
+        api.listTasks(),
+        api.listProjects(),
+      ]);
+      setTasks(taskData);
+      setDbProjects(projData.map((p) => p.name));
       setAuthed(true);
     } catch (e) {
       // 401 (bad/expired key) or any error → fall back to the lock screen.
@@ -73,8 +83,12 @@ export default function App() {
   async function handleUnlock(key) {
     api.setKey(key);
     try {
-      const data = await api.listTasks();
-      setTasks(data);
+      const [taskData, projData] = await Promise.all([
+        api.listTasks(),
+        api.listProjects(),
+      ]);
+      setTasks(taskData);
+      setDbProjects(projData.map((p) => p.name));
       setAuthed(true);
     } catch (e) {
       api.clearKey();
@@ -86,6 +100,20 @@ export default function App() {
     api.clearKey();
     setAuthed(false);
     setTasks([]);
+    setDbProjects([]);
+  }
+
+  async function addProject(name) {
+    const clean = name.trim();
+    if (!clean || projects.includes(clean)) return;
+    setDbProjects((ps) => [...ps, clean]); // optimistic
+    try {
+      await api.createProject(clean);
+    } catch (e) {
+      setDbProjects((ps) => ps.filter((p) => p !== clean)); // revert
+      if (e.status === 401) lockNow();
+      else alert("Couldn't add project: " + e.message);
+    }
   }
 
   async function saveTask(payload) {
@@ -158,7 +186,7 @@ export default function App() {
         view={view}
         onNavigate={setView}
         projects={projects}
-        onAddTask={() => setEditing({})}
+        onAddProject={addProject}
       />
 
       <main className="main">

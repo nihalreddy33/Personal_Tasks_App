@@ -34,6 +34,10 @@ export function serialize(task) {
   };
 }
 
+export function serializeProject(project) {
+  return { id: project.id, name: project.name };
+}
+
 const STATUSES = ["todo", "inprogress", "done"];
 const PRIORITIES = ["high", "medium", "low"];
 

@@ -22,3 +22,9 @@ model Task {
   @@index([status])
   @@index([project])
 }
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
