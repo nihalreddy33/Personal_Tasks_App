@@ -1,4 +1,5 @@
-// Domain model, constants, persistence, and analytics for the task dashboard.
+// Domain model, constants, and analytics for the task dashboard.
+// Persistence now lives in the database (see lib/api.js + the /api routes).
 
 export const STATUSES = [
   { id: "todo", label: "To Do" },
@@ -32,8 +33,6 @@ export const PROJECT_COLORS = [
 
 export const DEFAULT_PROJECTS = ["Personal", "Work", "Errands"];
 
-const STORAGE_KEY = "task-dashboard.v1";
-
 export function priorityRank(id) {
   const p = PRIORITIES.find((x) => x.id === id);
   return p ? p.rank : 99;
@@ -56,78 +55,14 @@ export function applyStatus(task, status) {
   return { ...task, status, completedAt: null };
 }
 
-export function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return seedState();
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.tasks)) return seedState();
-    return {
-      tasks: parsed.tasks.map((t) => ({
-        completedAt: t.status === "done" ? t.completedAt || t.createdAt : null,
-        ...t,
-      })),
-      projects:
-        Array.isArray(parsed.projects) && parsed.projects.length
-          ? parsed.projects
-          : DEFAULT_PROJECTS,
-      theme: parsed.theme === "dark" ? "dark" : "light",
-    };
-  } catch {
-    return seedState();
+// Derive the project list from the tasks, unioned with the defaults so the
+// board always offers somewhere to file a task even when the DB is empty.
+export function deriveProjects(tasks) {
+  const set = new Set(DEFAULT_PROJECTS);
+  for (const t of tasks) {
+    if (t.project) set.add(t.project);
   }
-}
-
-export function saveState(state) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // Storage may be unavailable (private mode); fail silently.
-  }
-}
-
-function seedState() {
-  const now = Date.now();
-  const day = 86400000;
-  return {
-    projects: DEFAULT_PROJECTS,
-    theme: "light",
-    tasks: [
-      mk("Plan the week ahead", "Personal", "high", "todo", now, 1),
-      mk("Reply to client emails", "Work", "medium", "inprogress", now, 0),
-      mk("Grocery run", "Errands", "low", "todo", now, 2),
-      mk("Draft project proposal", "Work", "high", "inprogress", now, 3),
-      done("Book dentist appointment", "Personal", "medium", now, 1),
-      done("Renew gym membership", "Errands", "low", now, 4),
-    ],
-  };
-
-  function mk(title, project, priority, status, base, dueInDays) {
-    return {
-      id: makeId(),
-      title,
-      notes: "",
-      status,
-      priority,
-      project,
-      due: dueInDays == null ? "" : isoDay(base + dueInDays * day),
-      createdAt: base - Math.round(Math.random() * 6) * day,
-      completedAt: null,
-    };
-  }
-  function done(title, project, priority, base, agoDays) {
-    return {
-      id: makeId(),
-      title,
-      notes: "",
-      status: "done",
-      priority,
-      project,
-      due: "",
-      createdAt: base - (agoDays + 3) * day,
-      completedAt: base - agoDays * day,
-    };
-  }
+  return [...set];
 }
 
 /* ---------------- date helpers ---------------- */

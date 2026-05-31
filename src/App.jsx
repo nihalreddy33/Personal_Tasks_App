@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
-import { loadState, saveState, applyStatus } from "./lib/tasks";
-import { hasPasscode, isUnlocked, setUnlocked } from "./lib/auth";
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { deriveProjects, applyStatus } from "./lib/tasks";
+import * as api from "./lib/api";
 import Sidebar from "./components/Sidebar";
 import Lock from "./components/Lock";
 import TaskModal from "./components/TaskModal";
@@ -9,6 +11,8 @@ import Board from "./views/Board";
 import Performance from "./views/Performance";
 import "./App.css";
 
+const THEME_KEY = "task-dashboard.theme";
+
 const TITLES = {
   dashboard: { h: "Dashboard", sub: "Track and manage your tasks at a glance" },
   board: { h: "Task Board", sub: "Drag cards between columns to update status" },
@@ -16,86 +20,134 @@ const TITLES = {
 };
 
 export default function App() {
-  const [state, setState] = useState(loadState);
-  const { tasks, projects, theme } = state;
+  const [tasks, setTasks] = useState([]);
+  const [authed, setAuthed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [view, setView] = useState("dashboard");
   const [editing, setEditing] = useState(null);
+  const [theme, setTheme] = useState("light");
 
-  // Passcode gate: locked when a passcode exists and this session isn't unlocked.
-  const [unlocked, setUnlockedState] = useState(() =>
-    hasPasscode() ? isUnlocked() : true
-  );
-  const [authMode, setAuthMode] = useState(null); // null | 'create'
-
-  useEffect(() => saveState(state), [state]);
+  // Theme is a client-only preference, kept in localStorage.
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem(THEME_KEY);
+      if (t === "dark" || t === "light") setTheme(t);
+    } catch {
+      // ignore
+    }
+  }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // ignore
+    }
   }, [theme]);
 
-  function upsertTask(task) {
-    setState((s) => {
-      const exists = s.tasks.some((t) => t.id === task.id);
-      const tasks = exists
-        ? s.tasks.map((t) => (t.id === task.id ? task : t))
-        : [...s.tasks, task];
-      const projects =
-        task.project && !s.projects.includes(task.project)
-          ? [...s.projects, task.project]
-          : s.projects;
-      return { ...s, tasks, projects };
-    });
-  }
+  const projects = useMemo(() => deriveProjects(tasks), [tasks]);
 
-  function deleteTask(id) {
-    setState((s) => ({ ...s, tasks: s.tasks.filter((t) => t.id !== id) }));
-  }
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.listTasks();
+      setTasks(data);
+      setAuthed(true);
+    } catch (e) {
+      // 401 (bad/expired key) or any error → fall back to the lock screen.
+      if (e.status === 401) api.clearKey();
+      setAuthed(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  function setStatus(id, status) {
-    setState((s) => ({
-      ...s,
-      tasks: s.tasks.map((t) => (t.id === id ? applyStatus(t, status) : t)),
-    }));
-  }
+  useEffect(() => {
+    if (api.hasKey()) load();
+    else setLoading(false);
+  }, [load]);
 
-  function toggleTheme() {
-    setState((s) => ({ ...s, theme: s.theme === "dark" ? "light" : "dark" }));
-  }
-
-  function handleLockButton() {
-    if (hasPasscode()) {
-      // Lock immediately.
-      setUnlocked(false);
-      setUnlockedState(false);
-    } else {
-      // Prompt to set one up.
-      setAuthMode("create");
+  // Called by the lock screen; throws on failure so Lock can show the error.
+  async function handleUnlock(key) {
+    api.setKey(key);
+    try {
+      const data = await api.listTasks();
+      setTasks(data);
+      setAuthed(true);
+    } catch (e) {
+      api.clearKey();
+      throw e;
     }
   }
 
-  // Gate the whole app behind the lock screen when required.
-  if (hasPasscode() && !unlocked) {
+  function lockNow() {
+    api.clearKey();
+    setAuthed(false);
+    setTasks([]);
+  }
+
+  async function saveTask(payload) {
+    setSaving(true);
+    try {
+      if (payload.id) {
+        const updated = await api.updateTask(payload.id, payload);
+        setTasks((ts) => ts.map((t) => (t.id === updated.id ? updated : t)));
+      } else {
+        const created = await api.createTask(payload);
+        setTasks((ts) => [...ts, created]);
+      }
+      setEditing(null);
+    } catch (e) {
+      if (e.status === 401) lockNow();
+      else alert("Couldn't save: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeTask(id) {
+    const prev = tasks;
+    setTasks((ts) => ts.filter((t) => t.id !== id)); // optimistic
+    try {
+      await api.deleteTask(id);
+    } catch (e) {
+      setTasks(prev); // revert
+      if (e.status === 401) lockNow();
+    }
+  }
+
+  async function setStatus(id, status) {
+    const prev = tasks;
+    setTasks((ts) => ts.map((t) => (t.id === id ? applyStatus(t, status) : t)));
+    try {
+      const updated = await api.updateTask(id, { status });
+      setTasks((ts) => ts.map((t) => (t.id === updated.id ? updated : t)));
+    } catch (e) {
+      setTasks(prev);
+      if (e.status === 401) lockNow();
+    }
+  }
+
+  function toggleTheme() {
+    setTheme((th) => (th === "dark" ? "light" : "dark"));
+  }
+
+  if (loading) {
     return (
-      <Lock
-        mode="unlock"
-        onUnlock={() => {
-          setUnlocked(true);
-          setUnlockedState(true);
-        }}
-      />
+      <div className="lock-screen">
+        <div className="lock-card">
+          <div className="lock-logo">✦</div>
+          <h1>Loading…</h1>
+          <p className="muted">Connecting to your tasks.</p>
+        </div>
+      </div>
     );
   }
-  if (authMode === "create") {
-    return (
-      <Lock
-        mode="create"
-        onUnlock={() => {
-          setUnlockedState(true);
-          setAuthMode(null);
-        }}
-        onCancel={() => setAuthMode(null)}
-      />
-    );
+
+  if (!authed) {
+    return <Lock onUnlock={handleUnlock} />;
   }
 
   const t = TITLES[view];
@@ -120,12 +172,8 @@ export default function App() {
             <input placeholder="Search anything…" disabled />
           </div>
           <div className="topbar-actions">
-            <button
-              className="round-btn"
-              onClick={handleLockButton}
-              title={hasPasscode() ? "Lock now" : "Set a passcode"}
-            >
-              {hasPasscode() ? "🔒" : "🔓"}
+            <button className="round-btn" onClick={lockNow} title="Lock (sign out)">
+              🔒
             </button>
             <button className="round-btn" onClick={toggleTheme} title="Toggle theme">
               {theme === "dark" ? "☀" : "☾"}
@@ -157,7 +205,7 @@ export default function App() {
               tasks={tasks}
               projects={projects}
               onEdit={setEditing}
-              onDelete={deleteTask}
+              onDelete={removeTask}
               onSetStatus={setStatus}
             />
           )}
@@ -171,11 +219,9 @@ export default function App() {
         <TaskModal
           task={editing}
           projects={projects}
+          saving={saving}
           onClose={() => setEditing(null)}
-          onSave={(task) => {
-            upsertTask(task);
-            setEditing(null);
-          }}
+          onSave={saveTask}
         />
       )}
     </div>

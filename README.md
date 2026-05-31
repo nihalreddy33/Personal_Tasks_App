@@ -1,22 +1,46 @@
 # Task Dashboard
 
-A personal task tracker — kanban board with due dates, priorities, projects, and progress stats. Everything is stored locally in your browser (localStorage); no account or backend.
+A personal task tracker — kanban board with due dates, priorities, projects, and progress stats. Built with **Next.js** and backed by **Prisma Postgres**, with the API gated behind a shared-secret access key.
 
-## Run it
-
-```bash
-./start.sh
+```
+Browser (React)  →  /api/tasks (Next.js, shared-secret gate)  →  Prisma  →  Prisma Postgres
 ```
 
-Then open http://localhost:5173. (The script uses the Node runtime installed under `../.tools/`, so it works even though Node isn't on your global PATH.)
+## Quick start (local)
 
-To build a static production bundle instead:
+1. **Set up environment variables.** Copy the template and fill in real values:
 
-```bash
-export PATH="/Users/nihalreddygurrala/Workspace/.tools/node-v22.14.0-darwin-arm64/bin:$PATH"
-npm run build      # outputs to dist/
-npm run preview    # serves the built bundle
-```
+   ```bash
+   cp .env.example .env.local
+   ```
+
+   - `DATABASE_URL` — your Prisma Postgres connection string (Vercel → your project → **Storage** → the Prisma Postgres store → `.env` tab). It looks like `prisma+postgres://accelerate.prisma-data.net/?api_key=...`.
+   - `APP_SECRET` — a long random string you choose. This is the **access key** you'll type into the app's lock screen. Generate one with `openssl rand -hex 24`.
+
+2. **Create the database table** (one time, and after any schema change):
+
+   ```bash
+   npm run db:push      # = prisma db push
+   ```
+
+3. **Run it:**
+
+   ```bash
+   ./start.sh           # or: npm run dev
+   ```
+
+   Open http://localhost:5173 (or http://localhost:3000 with `npm run dev`) and enter your `APP_SECRET` on the lock screen.
+
+> The `start.sh` script uses the Node runtime under `../.tools/`, so it works even though Node isn't on your global PATH.
+
+## Deploy to Vercel
+
+1. Push to GitHub (already connected) — Vercel builds on push. The build runs `prisma generate && next build` automatically.
+2. In your Vercel project → **Settings → Environment Variables**, make sure both are set:
+   - `DATABASE_URL` — usually added automatically when you attach the Prisma Postgres store; confirm it's there.
+   - `APP_SECRET` — add the same secret you use locally (or a fresh one for production).
+3. Run `npm run db:push` once against the production `DATABASE_URL` (or use a Prisma migration) so the table exists.
+4. Redeploy. Visit the site, enter the `APP_SECRET`, and your tasks now persist in Postgres.
 
 ## Features
 
@@ -30,24 +54,28 @@ Across all views:
 
 - **Due dates & priority** — High / Medium / Low priority and an optional due date. Cards sort by priority, then by soonest due. Overdue items are highlighted.
 - **Projects** — group tasks by project; type a new project name in the task form and it's remembered, with a stable colored dot.
-- **Light & dark theme** — toggle with the ☾/☀ button in the top bar; your choice is saved.
-- **Passcode lock** — the 🔓 button in the top bar lets you set a passcode; once set, the app prompts for it on each new session and the 🔒 button locks it on demand.
+- **Light & dark theme** — toggle with the ☾/☀ button in the top bar; your choice is saved (in the browser).
+- **Access-key lock** — the app prompts for the access key (`APP_SECRET`) on the lock screen; the 🔒 button locks it on demand. Tasks are stored in Postgres and synced across any device that knows the key.
 
 ### Tips
 
 - Click **+ Add Task** to create a task; double-click a card or the ✎ icon to edit it.
 - All charts are derived from your real task data (no mock numbers). Completing a task stamps it so it shows up in the weekly trends and activity heatmap.
-- Data lives in your browser under the `task-dashboard.v1` key — clearing site data resets it.
+- Tasks live in your Prisma Postgres database. Only the theme preference and the entered access key are kept in the browser.
 
-### About the passcode lock
+### Security model
 
-The passcode is a **local deterrent, not encryption**. Because the app is fully client-side, your task data stays readable to anyone with browser DevTools access regardless of the lock. The passcode itself is never stored — only a salted SHA-256 hash is kept — so the code can't be read back, but the data is not encrypted. If you need real protection (encrypted-at-rest data, or true accounts with multi-device sync), that requires the encrypted-vault or backend-auth approach instead.
+The API (`/api/tasks`) checks the `x-app-secret` header against `APP_SECRET` on **every** request — no key or wrong key returns `401`. The secret lives only in server-side environment variables and is never shipped to the browser bundle. This is single-user, shared-secret protection: anyone who knows the key has full read/write access. For separate per-user accounts, you'd add real auth (e.g. Auth.js or Clerk) on top.
 
 ## Project layout
 
-- `src/App.jsx` — app shell: sidebar, top bar, view routing, theme, lock gate, and task state.
+- `src/app/` — Next.js App Router: `layout.jsx`, `page.jsx`, and the `api/tasks` route handlers.
+- `src/App.jsx` — client app shell: sidebar, top bar, view routing, theme, lock gate, and data orchestration.
 - `src/views/` — `Dashboard.jsx`, `Board.jsx`, `Performance.jsx`.
-- `src/components/` — `Sidebar.jsx`, `TaskModal.jsx`, `Lock.jsx`, and `charts.jsx` (dependency-free SVG charts).
-- `src/lib/tasks.js` — data model, constants, date helpers, persistence, and analytics.
-- `src/lib/auth.js` — passcode hashing and lock/unlock session state.
+- `src/components/` — `Sidebar.jsx`, `TaskModal.jsx`, `Lock.jsx` (access-key screen), and `charts.jsx`.
+- `src/lib/tasks.js` — constants, date helpers, and analytics (pure, no persistence).
+- `src/lib/api.js` — client fetch helpers + access-key storage.
+- `src/lib/prisma.js` — Prisma client singleton (Accelerate extension).
+- `src/lib/server.js` — server-side auth check, field sanitization, and serialization.
+- `prisma/schema.prisma` — the `Task` model.
 - `src/App.css` / `src/index.css` — styling and light/dark theme variables.

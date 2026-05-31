@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { STATUSES, PRIORITIES, makeId, applyStatus } from "../lib/tasks";
+import { STATUSES, PRIORITIES } from "../lib/tasks";
 
-export default function TaskModal({ task, projects, onClose, onSave }) {
+export default function TaskModal({ task, projects, saving, onClose, onSave }) {
   const isNew = !task.id;
   const [form, setForm] = useState({
     title: task.title || "",
@@ -19,15 +19,16 @@ export default function TaskModal({ task, projects, onClose, onSave }) {
   function submit(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    const base = {
-      id: task.id || makeId(),
-      createdAt: task.createdAt || Date.now(),
-      completedAt: task.completedAt || null,
+    // Build a clean payload. The server assigns id/createdAt and derives
+    // completedAt from the status, so we only send the editable fields
+    // (plus the id when editing an existing task).
+    const payload = {
       ...form,
       title: form.title.trim(),
       project: form.project.trim(),
     };
-    onSave(applyStatus(base, form.status));
+    if (task.id) payload.id = task.id;
+    onSave(payload);
   }
 
   return (
@@ -109,8 +110,8 @@ export default function TaskModal({ task, projects, onClose, onSave }) {
             <button type="button" className="btn" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn primary">
-              {isNew ? "Add task" : "Save"}
+            <button type="submit" className="btn primary" disabled={saving}>
+              {saving ? "Saving…" : isNew ? "Add task" : "Save"}
             </button>
           </div>
         </form>

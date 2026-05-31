@@ -25,3 +25,12 @@ dist-ssr
 
 # Claude Code local config (machine-specific paths)
 .claude
+
+# Local env / secrets
+.env
+.env.local
+.env*.local
+
+# Next.js
+.next
+next-env.d.ts
