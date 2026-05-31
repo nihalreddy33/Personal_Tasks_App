@@ -706,10 +706,49 @@
   background: color-mix(in srgb, var(--ok) 15%, transparent);
   color: var(--ok);
 }
+.card-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
 .card-title {
   font-size: 14px;
   margin: 0 0 4px;
   line-height: 1.35;
+}
+.card-title.done {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+.card.is-done {
+  opacity: 0.72;
+}
+/* Round checkbox to complete a task */
+.check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 2px solid var(--border-2);
+  border-radius: 50%;
+  background: var(--surface);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+}
+.check:hover {
+  border-color: var(--ok);
+}
+.check.checked {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.check:active {
+  transform: scale(0.92);
 }
 .card-notes {
   font-size: 12.5px;

@@ -93,6 +93,9 @@ export default function Board({ tasks, projects, onEdit, onDelete, onSetStatus }
                     projects={projects}
                     onEdit={() => onEdit(t)}
                     onDelete={() => onDelete(t.id)}
+                    onToggleDone={() =>
+                      onSetStatus(t.id, t.status === "done" ? "todo" : "done")
+                    }
                     onDragStart={() => setDragId(t.id)}
                     onDragEnd={() => setDragId(null)}
                   />
@@ -107,12 +110,21 @@ export default function Board({ tasks, projects, onEdit, onDelete, onSetStatus }
   );
 }
 
-function TaskCard({ task, projects, onEdit, onDelete, onDragStart, onDragEnd }) {
+function TaskCard({
+  task,
+  projects,
+  onEdit,
+  onDelete,
+  onToggleDone,
+  onDragStart,
+  onDragEnd,
+}) {
   const dl = dueLabel(task.due);
   const overdue = isOverdue(task);
+  const done = task.status === "done";
   return (
     <article
-      className="card"
+      className={"card" + (done ? " is-done" : "")}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -130,7 +142,20 @@ function TaskCard({ task, projects, onEdit, onDelete, onDragStart, onDragEnd }) 
           </span>
         )}
       </div>
-      <h3 className="card-title">{task.title}</h3>
+      <div className="card-title-row">
+        <button
+          className={"check" + (done ? " checked" : "")}
+          title={done ? "Mark as not done" : "Mark as done"}
+          aria-pressed={done}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleDone();
+          }}
+        >
+          {done ? "✓" : ""}
+        </button>
+        <h3 className={"card-title" + (done ? " done" : "")}>{task.title}</h3>
+      </div>
       {task.notes && <p className="card-notes">{task.notes}</p>}
       <div className="card-bottom">
         {dl && <span className={"due" + (overdue ? " overdue" : "")}>{dl}</span>}
